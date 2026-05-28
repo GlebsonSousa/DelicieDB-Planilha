@@ -62,6 +62,11 @@ async function sincronizarComSheets() {
     }
 }
 
+// --- ROTA DE TESTE ---
+app.get('/Status', (req, res) => {
+    res.send({ status: 'Servidor rodando!' });
+});
+
 // --- ROTA PRINCIPAL (WEBHOOK DO WHATSAPP) ---
 app.post('/webhook-whatsapp', async (req, res) => {
     try {
