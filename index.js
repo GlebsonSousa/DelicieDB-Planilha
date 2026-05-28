@@ -80,12 +80,18 @@ app.post('/webhook-whatsapp', async (req, res) => {
         // 1. Extração de dados via IA usando a GROQ (Grátis, rápida e sem bloqueio na Render)
         const MODELO_IA = "llama-3.1-8b-instant"; 
 
+        // 1. Extração de dados via IA usando a GROQ (URL Corrigida)
         const response = await axios.post(
-            `https://api.groq.com/openai/v1/chat/completions`,
+            `https://api.groq.com/openai/v1/chat/completions`, // URL padrão da API v1
             {
-                model: MODELO_IA,
+                model: "llama-3.1-8b-instant", // Modelo exato
                 messages: [
-                    { role: "system", content: "Você é um assistente de extração de dados. Retorne APENAS um JSON válido, sem markdown, sem explicações. Chaves obrigatórias: 'cliente' (use 'Não informado' se não houver), 'produto', 'sabor', 'quantidade' (como número inteiro)." },
+                    { 
+                        role: "system", 
+                        content: `É um assistente de extração de dados de vendas. Avalie a mensagem do utilizador.
+                        Se for uma venda válida, retorne APENAS um JSON: {"valido": true, "cliente": "Nome", "produto": "Nome do produto", "sabor": "Sabor", "quantidade": 1}.
+                        Se a mensagem NÃO for uma venda, não fizer sentido, ou faltarem dados essenciais, retorne APENAS um JSON: {"valido": false, "erro": "Explicação amigável"}.` 
+                    },
                     { role: "user", content: `Mensagem: "${mensagemUsuario}"` }
                 ],
                 max_tokens: 150,
