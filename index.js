@@ -78,7 +78,7 @@ app.post('/webhook-whatsapp', async (req, res) => {
         console.log(`Processando mensagem: "${mensagemUsuario}"`);
 
         // 1. Extração de dados via IA usando a GROQ (Grátis, rápida e sem bloqueio na Render)
-        const MODELO_IA = "llama3-8b-8192"; 
+        const MODELO_IA = "llama-3.1-8b-instant"; 
 
         const response = await axios.post(
             `https://api.groq.com/openai/v1/chat/completions`,
