@@ -77,11 +77,13 @@ app.post('/webhook-whatsapp', async (req, res) => {
 
         console.log(`Processando mensagem: "${mensagemUsuario}"`);
 
-        // 1. Extração de dados via IA usando AXIOS (Anti-Bug de DNS)
+        // 1. Extração de dados via IA usando a GROQ (Grátis, rápida e sem bloqueio na Render)
+        const MODELO_IA = "llama3-8b-8192"; 
+
         const response = await axios.post(
-            `https://api-inference.huggingface.co/models/${MODELO_HF}/v1/chat/completions`,
+            `https://api.groq.com/openai/v1/chat/completions`,
             {
-                model: MODELO_HF,
+                model: MODELO_IA,
                 messages: [
                     { role: "system", content: "Você é um assistente de extração de dados. Retorne APENAS um JSON válido, sem markdown, sem explicações. Chaves obrigatórias: 'cliente' (use 'Não informado' se não houver), 'produto', 'sabor', 'quantidade' (como número inteiro)." },
                     { role: "user", content: `Mensagem: "${mensagemUsuario}"` }
@@ -91,11 +93,9 @@ app.post('/webhook-whatsapp', async (req, res) => {
             },
             {
                 headers: {
-                    'Authorization': `Bearer ${process.env.HF_TOKEN}`,
+                    'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
                     'Content-Type': 'application/json'
-                },
-                // A MARRETA: Força a requisição a usar IPv4 direto na raiz da conexão de rede
-                httpsAgent: new https.Agent({ family: 4 }) 
+                }
             }
         );
         
@@ -126,7 +126,7 @@ app.post('/webhook-whatsapp', async (req, res) => {
         });
 
     } catch (error) {
-        // Agora o erro vai mostrar mais detalhes caso o Axios falhe
+        // Agora vai nos mostrar o erro exato caso algo saia do trilho
         console.error("Erro no fluxo principal:", error.response?.data || error.message);
         res.status(500).send({ error: 'Erro interno no processamento.' });
     }
