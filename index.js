@@ -4,6 +4,7 @@ import axios from 'axios'; // <-- A nossa nova ferramenta de rede
 import { google } from 'googleapis';
 import dotenv from 'dotenv';
 import dns from 'dns';
+import https from 'https'
 
 // Força o IPv4 para a Render não se perder no DNS
 dns.setDefaultResultOrder('ipv4first');
@@ -92,7 +93,9 @@ app.post('/webhook-whatsapp', async (req, res) => {
                 headers: {
                     'Authorization': `Bearer ${process.env.HF_TOKEN}`,
                     'Content-Type': 'application/json'
-                }
+                },
+                // A MARRETA: Força a requisição a usar IPv4 direto na raiz da conexão de rede
+                httpsAgent: new https.Agent({ family: 4 }) 
             }
         );
         
