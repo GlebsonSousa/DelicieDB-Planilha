@@ -72,29 +72,37 @@ app.post('/webhook-whatsapp', async (req, res) => {
         const mensagemUsuario = req.body.mensagem;
         if (!mensagemUsuario) return res.status(400).send({ error: 'Mensagem não fornecida.' });
 
-        console.log(`Processando mensagem: "${mensagemUsuario}"`);
+        console.log(`Processando: "${mensagemUsuario}"`);
 
-        // Usando o FETCH nativo do Node.js para evitar conflitos de rota do Axios
+        // Desativamos explicitamente qualquer proxy e forçamos o caminho completo
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Host': 'api.groq.com' // Força o host correto
             },
             body: JSON.stringify({
                 model: "llama-3.1-8b-instant",
                 messages: [
-                    { 
-                        role: "system", 
-                        content: `Extraia dados de venda. Retorne APENAS JSON: {"valido": true, "cliente": "Nome", "produto": "Nome", "sabor": "Sabor", "quantidade": 1} ou {"valido": false, "erro": "Explicação"}.` 
-                    },
+                    { role: "system", content: "Extraia dados de venda. Retorne JSON: {'valido': true, 'cliente': 'Nome', 'produto': 'Nome', 'sabor': 'Sabor', 'quantidade': 1} ou {'valido': false, 'erro': 'Explicação'}." },
                     { role: "user", content: mensagemUsuario }
                 ],
                 temperature: 0.1
-            })
+            }),
+            // Esta propriedade é a chave: impede que o sistema tente usar um proxy local
+            dispatcher: undefined 
         });
 
-        const data = await response.json();
+        // Log para ver o que a Groq respondeu antes de tentar o JSON.parse
+        const rawResponse = await response.text();
+        console.log("Resposta bruta da Groq:", rawResponse);
+
+        if (!response.ok) {
+            throw new Error(`Erro Groq ${response.status}: ${rawResponse}`);
+        }
+
+        const data = JSON.parse(rawResponse);
         
         // Verifica se a Groq respondeu com sucesso
         if (!response.ok) {
