@@ -3,6 +3,10 @@ import { createClient } from '@supabase/supabase-js';
 import { HfInference } from '@huggingface/inference';
 import { google } from 'googleapis';
 import dotenv from 'dotenv';
+import dns from 'dns'; // 1. Importa o módulo nativo de rede
+
+// 2. A MÁGICA: Força o Node a usar IPv4, resolvendo o erro ENOTFOUND na Render
+dns.setDefaultResultOrder('ipv4first');
 
 dotenv.config();
 
