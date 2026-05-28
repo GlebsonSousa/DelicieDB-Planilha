@@ -81,29 +81,27 @@ app.post('/webhook-whatsapp', async (req, res) => {
         const MODELO_IA = "llama-3.1-8b-instant"; 
 
         // 1. Extração de dados via IA usando a GROQ (URL Corrigida)
-        const response = await axios.post(
-            `https://api.groq.com/openai/v1/chat/completions`, // URL padrão da API v1
-            {
-                model: "llama-3.1-8b-instant", // Modelo exato
+      
+        const response = await axios({
+            method: 'post',
+            url: 'https://api.groq.com/openai/v1/chat/completions',
+            headers: {
+                'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            data: {
+                model: "llama-3.1-8b-instant",
                 messages: [
                     { 
                         role: "system", 
-                        content: `É um assistente de extração de dados de vendas. Avalie a mensagem do utilizador.
-                        Se for uma venda válida, retorne APENAS um JSON: {"valido": true, "cliente": "Nome", "produto": "Nome do produto", "sabor": "Sabor", "quantidade": 1}.
-                        Se a mensagem NÃO for uma venda, não fizer sentido, ou faltarem dados essenciais, retorne APENAS um JSON: {"valido": false, "erro": "Explicação amigável"}.` 
+                        content: `É um assistente de extração de dados de vendas. Se for uma venda válida, retorne APENAS um JSON: {"valido": true, "cliente": "Nome", "produto": "Nome do produto", "sabor": "Sabor", "quantidade": 1}. Se não, retorne {"valido": false, "erro": "Explicação"}.` 
                     },
                     { role: "user", content: `Mensagem: "${mensagemUsuario}"` }
                 ],
                 max_tokens: 150,
                 temperature: 0.1
-            },
-            {
-                headers: {
-                    'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
-                    'Content-Type': 'application/json'
-                }
             }
-        );
+        });
         
         let textoResposta = response.data.choices[0].message.content;
         textoResposta = textoResposta.replace(/```json|```/g, '').trim();
