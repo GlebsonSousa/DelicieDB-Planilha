@@ -70,68 +70,60 @@ app.get('/Status', (req, res) => {
 app.post('/webhook-whatsapp', async (req, res) => {
     try {
         const mensagemUsuario = req.body.mensagem;
-
-        if (!mensagemUsuario) {
-            return res.status(400).send({ error: 'Mensagem não fornecida.' });
-        }
+        if (!mensagemUsuario) return res.status(400).send({ error: 'Mensagem não fornecida.' });
 
         console.log(`Processando mensagem: "${mensagemUsuario}"`);
 
-        // 1. Extração de dados via IA usando a GROQ (Grátis, rápida e sem bloqueio na Render)
-        const MODELO_IA = "llama-3.1-8b-instant"; 
-
-        // 1. Extração de dados via IA usando a GROQ (URL Corrigida)
-      
-        const response = await axios({
-            method: 'post',
-            url: 'https://api.groq.com/openai/v1/chat/completions',
+        // Usando o FETCH nativo do Node.js para evitar conflitos de rota do Axios
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
             headers: {
                 'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
                 'Content-Type': 'application/json'
             },
-            data: {
+            body: JSON.stringify({
                 model: "llama-3.1-8b-instant",
                 messages: [
                     { 
                         role: "system", 
-                        content: `É um assistente de extração de dados de vendas. Se for uma venda válida, retorne APENAS um JSON: {"valido": true, "cliente": "Nome", "produto": "Nome do produto", "sabor": "Sabor", "quantidade": 1}. Se não, retorne {"valido": false, "erro": "Explicação"}.` 
+                        content: `Extraia dados de venda. Retorne APENAS JSON: {"valido": true, "cliente": "Nome", "produto": "Nome", "sabor": "Sabor", "quantidade": 1} ou {"valido": false, "erro": "Explicação"}.` 
                     },
-                    { role: "user", content: `Mensagem: "${mensagemUsuario}"` }
+                    { role: "user", content: mensagemUsuario }
                 ],
-                max_tokens: 150,
                 temperature: 0.1
-            }
+            })
         });
+
+        const data = await response.json();
         
-        let textoResposta = response.data.choices[0].message.content;
-        textoResposta = textoResposta.replace(/```json|```/g, '').trim();
+        // Verifica se a Groq respondeu com sucesso
+        if (!response.ok) {
+            throw new Error(`Erro Groq: ${JSON.stringify(data)}`);
+        }
+
+        let textoResposta = data.choices[0].message.content.replace(/```json|```/g, '').trim();
         const dadosVenda = JSON.parse(textoResposta);
 
-        // 2. Salva no banco de dados Supabase
-        const { error: dbError } = await supabase
-            .from('vendas')
-            .insert([{ 
-                cliente: dadosVenda.cliente, 
-                produto: dadosVenda.produto, 
-                sabor: dadosVenda.sabor, 
-                quantidade: dadosVenda.quantidade 
-            }]);
+        if (!dadosVenda.valido) {
+            return res.status(400).send({ error: dadosVenda.erro });
+        }
+
+        // Salva no Supabase
+        const { error: dbError } = await supabase.from('vendas').insert([{ 
+            cliente: dadosVenda.cliente, 
+            produto: dadosVenda.produto, 
+            sabor: dadosVenda.sabor, 
+            quantidade: dadosVenda.quantidade 
+        }]);
 
         if (dbError) throw dbError;
 
-        // 3. Aciona a sincronização com o Google Sheets
         await sincronizarComSheets();
 
-        // 4. Retorna sucesso para a API do WhatsApp
-        res.status(200).send({ 
-            status: 'Sucesso', 
-            dados: dadosVenda, 
-            mensagem: 'Venda registrada e planilha atualizada.' 
-        });
+        res.status(200).send({ status: 'Sucesso', dados: dadosVenda });
 
     } catch (error) {
-        // Agora vai nos mostrar o erro exato caso algo saia do trilho
-        console.error("Erro no fluxo principal:", error.response?.data || error.message);
+        console.error("Erro no fluxo principal:", error.message);
         res.status(500).send({ error: 'Erro interno no processamento.' });
     }
 });
