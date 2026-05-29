@@ -36,7 +36,7 @@ app.post('/webhook-whatsapp', async (req, res) => {
         const data = await response.json();
         
         if (!response.ok) {
-            return res.status(200).send({ error: `A Groq recusou a conexão: ${JSON.stringify(data)}` });
+            return res.status(400).send({ error: `A Groq recusou a conexão: ${JSON.stringify(data)}` });
         }
 
         // PEGA A EXATA MENSAGEM DA IA
@@ -45,7 +45,7 @@ app.post('/webhook-whatsapp', async (req, res) => {
 
         // Retorna a mensagem da IA dentro do status 400 propositalmente.
         // Assim o seu bot local pega isso e joga direto no chat do WhatsApp!
-        return res.status(400).send({ error: textoIA });
+        return res.status(200).send({ error: textoIA });
 
     } catch (error) {
         console.error("Erro Crítico:", error.message);
