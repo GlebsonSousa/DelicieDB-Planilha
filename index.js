@@ -72,9 +72,9 @@ app.post('/webhook-whatsapp', async (req, res) => {
         const mensagemUsuario = req.body.mensagem;
         if (!mensagemUsuario) return res.status(400).send({ error: 'Mensagem não fornecida.' });
 
-        console.log(`Processando mensagem direta: "${mensagemUsuario}"`);
+        console.log(`Nova mensagem para processar: "${mensagemUsuario}"`);
 
-        // 1. Pede para a IA responder como texto normal, sem JSON
+        // 1. Conexão testada e validada com a Groq, forçando formato JSON
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -83,43 +83,66 @@ app.post('/webhook-whatsapp', async (req, res) => {
             },
             body: JSON.stringify({
                 model: "llama-3.1-8b-instant",
+                response_format: { type: "json_object" }, // A MÁGICA QUE EVITA O ERRO 500
                 messages: [
                     { 
                         role: "system", 
-                        content: "Você está em modo de teste direto. Responda o que o usuário mandar de forma breve e em texto simples." 
+                        content: `Você é um robô de extração de dados de vendas. Responda EXCLUSIVAMENTE em formato JSON.
+                        Regra 1: Se for uma venda clara, retorne: {"valido": true, "cliente": "Nome do Cliente", "produto": "Nome do Produto", "sabor": "Sabor", "quantidade": 1}
+                        Regra 2: Se não for uma venda, for apenas uma saudação, ou faltarem dados essenciais, retorne: {"valido": false, "erro": "Por favor, informe o produto e a quantidade da venda."}` 
                     },
                     { role: "user", content: mensagemUsuario }
                 ],
-                temperature: 0.5
+                temperature: 0.1
             })
         });
 
         const data = await response.json();
         
         if (!response.ok) {
-            return res.status(400).send({ error: `Groq recusou: ${JSON.stringify(data)}` });
+            console.error("Erro da API Groq:", data);
+            return res.status(400).send({ error: 'Falha na comunicação com a IA.' });
         }
 
-        // 2. Pega exatamente o que a IA falou
+        // 2. Extrai e converte o JSON com segurança
         const textoResposta = data.choices[0].message.content;
-        console.log("Resposta que chegou da IA:", textoResposta);
+        console.log("JSON puro recebido da IA:", textoResposta);
+        
+        let dadosVenda;
+        try {
+            dadosVenda = JSON.parse(textoResposta);
+        } catch (erroParse) {
+            return res.status(400).send({ error: 'A IA gerou dados inválidos. Tente reformular a venda.' });
+        }
 
-        // 3. O HACK: Retornamos Status 400 propositalmente para ativar a mensagem de erro
-        // do seu bot do WhatsApp, fazendo a resposta da IA ser impressa no grupo!
-        return res.status(400).send({ error: `[TESTE IA]: ${textoResposta}` });
+        // 3. Validação inteligente (Se faltar algo, avisa no Whats e para por aqui)
+        if (dadosVenda.valido === false) {
+            return res.status(400).send({ error: dadosVenda.erro });
+        }
 
-        /* COMENTAMOS TUDO DAQUI PARA BAIXO:
-           // Supabase...
-           // Sheets...
-        */
+        // 4. Salvando no Supabase (Base de dados)
+        console.log("Guardando no banco de dados...");
+        const { error: dbError } = await supabase.from('vendas').insert([{ 
+            cliente: dadosVenda.cliente, 
+            produto: dadosVenda.produto, 
+            sabor: dadosVenda.sabor, 
+            quantidade: dadosVenda.quantidade 
+        }]);
+
+        if (dbError) throw dbError;
+
+        // 5. Sincronizando com a Planilha Google
+        console.log("Atualizando planilha...");
+        await sincronizarComSheets();
+
+        // 6. Retorna sucesso para o WhatsApp
+        res.status(200).send({ status: 'Sucesso', dados: dadosVenda });
 
     } catch (error) {
-        // Se algo quebrar, agora vamos ver o erro exato no grupo do Whats
-        console.error("Erro fatal:", error.message);
-        res.status(400).send({ error: `Erro Fatal no Node: ${error.message}` });
+        console.error("Erro crítico na API:", error.message);
+        res.status(500).send({ error: 'Erro interno no servidor ao processar a venda.' });
     }
 });
-
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`🚀 Servidor rodando na porta ${PORT}`);
