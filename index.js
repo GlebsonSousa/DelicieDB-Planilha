@@ -72,9 +72,9 @@ app.post('/webhook-whatsapp', async (req, res) => {
         const mensagemUsuario = req.body.mensagem;
         if (!mensagemUsuario) return res.status(400).send({ error: 'Mensagem não fornecida.' });
 
-        console.log(`Processando mensagem: "${mensagemUsuario}"`);
+        console.log(`Processando mensagem direta: "${mensagemUsuario}"`);
 
-        // Usando o FETCH nativo que validámos, com bloqueio rigoroso para JSON
+        // 1. Pede para a IA responder como texto normal, sem JSON
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -83,57 +83,40 @@ app.post('/webhook-whatsapp', async (req, res) => {
             },
             body: JSON.stringify({
                 model: "llama-3.1-8b-instant",
-                response_format: { type: "json_object" }, // FORÇA A DEVOLUÇÃO EM JSON PURO
                 messages: [
                     { 
                         role: "system", 
-                        content: `Você é um servidor de extração de dados. Retorne EXCLUSIVAMENTE um objeto JSON válido, sem comentários. 
-                        Regra 1: Se identificar cliente, produto, sabor e quantidade, retorne: {"valido": true, "cliente": "Nome", "produto": "Nome", "sabor": "Sabor", "quantidade": 1}. 
-                        Regra 2: Se não for uma venda clara, retorne: {"valido": false, "erro": "Não entendi a venda. Faltam dados ou não faz sentido."}.` 
+                        content: "Você está em modo de teste direto. Responda o que o usuário mandar de forma breve e em texto simples." 
                     },
                     { role: "user", content: mensagemUsuario }
                 ],
-                temperature: 0.1
+                temperature: 0.5
             })
         });
 
-        // Lemos a resposta bruta da IA
         const data = await response.json();
         
         if (!response.ok) {
-            console.error("Erro da API Groq:", data);
-            throw new Error('Falha na comunicação com a IA.');
+            return res.status(400).send({ error: `Groq recusou: ${JSON.stringify(data)}` });
         }
 
-        // Como forçámos o json_object, não precisamos de fazer replace em crases de markdown
+        // 2. Pega exatamente o que a IA falou
         const textoResposta = data.choices[0].message.content;
-        console.log("Resposta filtrada da IA:", textoResposta);
-        
-        const dadosVenda = JSON.parse(textoResposta);
+        console.log("Resposta que chegou da IA:", textoResposta);
 
-        // Se a IA classificar como inválido, devolvemos o erro para o WhatsApp
-        if (!dadosVenda.valido) {
-            return res.status(400).send({ error: dadosVenda.erro });
-        }
+        // 3. O HACK: Retornamos Status 400 propositalmente para ativar a mensagem de erro
+        // do seu bot do WhatsApp, fazendo a resposta da IA ser impressa no grupo!
+        return res.status(400).send({ error: `[TESTE IA]: ${textoResposta}` });
 
-        // Salva no Supabase
-        const { error: dbError } = await supabase.from('vendas').insert([{ 
-            cliente: dadosVenda.cliente, 
-            produto: dadosVenda.produto, 
-            sabor: dadosVenda.sabor, 
-            quantidade: dadosVenda.quantidade 
-        }]);
-
-        if (dbError) throw dbError;
-
-        // Atualiza a Planilha
-        await sincronizarComSheets();
-
-        res.status(200).send({ status: 'Sucesso', dados: dadosVenda });
+        /* COMENTAMOS TUDO DAQUI PARA BAIXO:
+           // Supabase...
+           // Sheets...
+        */
 
     } catch (error) {
-        console.error("Erro no fluxo principal:", error.message);
-        res.status(500).send({ error: 'Erro interno no processamento.' });
+        // Se algo quebrar, agora vamos ver o erro exato no grupo do Whats
+        console.error("Erro fatal:", error.message);
+        res.status(400).send({ error: `Erro Fatal no Node: ${error.message}` });
     }
 });
 
