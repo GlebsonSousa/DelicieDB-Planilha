@@ -72,46 +72,46 @@ app.post('/webhook-whatsapp', async (req, res) => {
         const mensagemUsuario = req.body.mensagem;
         if (!mensagemUsuario) return res.status(400).send({ error: 'Mensagem não fornecida.' });
 
-        console.log(`Processando: "${mensagemUsuario}"`);
+        console.log(`Processando mensagem: "${mensagemUsuario}"`);
 
-        // Desativamos explicitamente qualquer proxy e forçamos o caminho completo
+        // Usando o FETCH nativo que validámos, com bloqueio rigoroso para JSON
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
-                'Content-Type': 'application/json',
-                'Host': 'api.groq.com' // Força o host correto
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({
                 model: "llama-3.1-8b-instant",
+                response_format: { type: "json_object" }, // FORÇA A DEVOLUÇÃO EM JSON PURO
                 messages: [
-                    { role: "system", content: "Extraia dados de venda. Retorne JSON: {'valido': true, 'cliente': 'Nome', 'produto': 'Nome', 'sabor': 'Sabor', 'quantidade': 1} ou {'valido': false, 'erro': 'Explicação'}." },
+                    { 
+                        role: "system", 
+                        content: `Você é um servidor de extração de dados. Retorne EXCLUSIVAMENTE um objeto JSON válido, sem comentários. 
+                        Regra 1: Se identificar cliente, produto, sabor e quantidade, retorne: {"valido": true, "cliente": "Nome", "produto": "Nome", "sabor": "Sabor", "quantidade": 1}. 
+                        Regra 2: Se não for uma venda clara, retorne: {"valido": false, "erro": "Não entendi a venda. Faltam dados ou não faz sentido."}.` 
+                    },
                     { role: "user", content: mensagemUsuario }
                 ],
                 temperature: 0.1
-            }),
-            // Esta propriedade é a chave: impede que o sistema tente usar um proxy local
-            dispatcher: undefined 
+            })
         });
 
-        // Log para ver o que a Groq respondeu antes de tentar o JSON.parse
-        const rawResponse = await response.text();
-        console.log("Resposta bruta da Groq:", rawResponse);
-
-        if (!response.ok) {
-            throw new Error(`Erro Groq ${response.status}: ${rawResponse}`);
-        }
-
-        const data = JSON.parse(rawResponse);
+        // Lemos a resposta bruta da IA
+        const data = await response.json();
         
-        // Verifica se a Groq respondeu com sucesso
         if (!response.ok) {
-            throw new Error(`Erro Groq: ${JSON.stringify(data)}`);
+            console.error("Erro da API Groq:", data);
+            throw new Error('Falha na comunicação com a IA.');
         }
 
-        let textoResposta = data.choices[0].message.content.replace(/```json|```/g, '').trim();
+        // Como forçámos o json_object, não precisamos de fazer replace em crases de markdown
+        const textoResposta = data.choices[0].message.content;
+        console.log("Resposta filtrada da IA:", textoResposta);
+        
         const dadosVenda = JSON.parse(textoResposta);
 
+        // Se a IA classificar como inválido, devolvemos o erro para o WhatsApp
         if (!dadosVenda.valido) {
             return res.status(400).send({ error: dadosVenda.erro });
         }
@@ -126,6 +126,7 @@ app.post('/webhook-whatsapp', async (req, res) => {
 
         if (dbError) throw dbError;
 
+        // Atualiza a Planilha
         await sincronizarComSheets();
 
         res.status(200).send({ status: 'Sucesso', dados: dadosVenda });
