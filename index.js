@@ -43,9 +43,8 @@ app.post('/webhook-whatsapp', async (req, res) => {
         const textoIA = data.choices[0].message.content;
         console.log(`🤖 IA respondeu: "${textoIA}"`);
 
-        // Retorna a mensagem da IA dentro do status 400 propositalmente.
-        // Assim o seu bot local pega isso e joga direto no chat do WhatsApp!
-        return res.status(200).send({ error: textoIA });
+        // RETORNA UM STATUS 200 (SUCESSO) DE VERDADE!
+        return res.status(200).send({ respostaIA: textoIA });
 
     } catch (error) {
         console.error("Erro Crítico:", error.message);
