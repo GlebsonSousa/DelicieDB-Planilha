@@ -36,7 +36,7 @@ app.post('/webhook-whatsapp', async (req, res) => {
         const data = await response.json();
         
         if (!response.ok) {
-            return res.status(400).send({ error: `A Groq recusou a conexão: ${JSON.stringify(data)}` });
+            return res.status(200).send({ error: `A Groq recusou a conexão: ${JSON.stringify(data)}` });
         }
 
         // PEGA A EXATA MENSAGEM DA IA
